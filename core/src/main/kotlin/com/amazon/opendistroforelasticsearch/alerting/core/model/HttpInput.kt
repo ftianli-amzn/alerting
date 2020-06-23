@@ -99,7 +99,7 @@ data class HttpInput(
         const val HOST_FIELD = "host"
         const val PORT_FIELD = "port"
         const val PATH_FIELD = "path"
-        const val PARAMS_FIELD = "params"
+        const val PARAMS_FIELD = "query_params"
         const val URL_FIELD = "url"
         const val CONNECTION_TIMEOUT_FIELD = "connection_timeout"
         const val SOCKET_TIMEOUT_FIELD = "socket_timeout"
