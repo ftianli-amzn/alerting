@@ -60,7 +60,7 @@ import org.elasticsearch.rest.BaseRestHandler
 import org.elasticsearch.rest.BaseRestHandler.RestChannelConsumer
 import org.elasticsearch.rest.BytesRestResponse
 import org.elasticsearch.rest.RestChannel
-import org.elasticsearch.rest.RestController
+import org.elasticsearch.rest.RestHandler.Route
 import org.elasticsearch.rest.RestRequest
 import org.elasticsearch.rest.RestRequest.Method.POST
 import org.elasticsearch.rest.RestRequest.Method.PUT
@@ -78,11 +78,10 @@ private val log = LogManager.getLogger(RestIndexMonitorAction::class.java)
  * Rest handlers to create and update monitors.
  */
 class RestIndexMonitorAction(
-    val settings: Settings,
-    controller: RestController,
+    settings: Settings,
     jobIndices: ScheduledJobIndices,
     clusterService: ClusterService
-) : BaseRestHandler(settings) {
+) : BaseRestHandler() {
 
     private var scheduledJobIndices: ScheduledJobIndices
     private val clusterService: ClusterService
@@ -92,8 +91,6 @@ class RestIndexMonitorAction(
     @Volatile private var maxActionThrottle = MAX_ACTION_THROTTLE_VALUE.get(settings)
 
     init {
-        controller.registerHandler(POST, AlertingPlugin.MONITOR_BASE_URI, this) // Create a new monitor
-        controller.registerHandler(PUT, "${AlertingPlugin.MONITOR_BASE_URI}/{monitorID}", this)
         scheduledJobIndices = jobIndices
 
         clusterService.clusterSettings.addSettingsUpdateConsumer(ALERTING_MAX_MONITORS) { maxMonitors = it }
@@ -107,8 +104,15 @@ class RestIndexMonitorAction(
         return "index_monitor_action"
     }
 
+    override fun routes(): List<Route> {
+        return listOf(
+                Route(POST, AlertingPlugin.MONITOR_BASE_URI), // Create a new monitor
+                Route(PUT, "${AlertingPlugin.MONITOR_BASE_URI}/{monitorID}")
+        )
+    }
+
     @Throws(IOException::class)
-    override fun prepareRequest(request: RestRequest, client: NodeClient): BaseRestHandler.RestChannelConsumer {
+    override fun prepareRequest(request: RestRequest, client: NodeClient): RestChannelConsumer {
         val id = request.param("monitorID", Monitor.NO_ID)
         if (request.method() == PUT && Monitor.NO_ID == id) {
             throw IllegalArgumentException("Missing monitor ID")
@@ -145,7 +149,7 @@ class RestIndexMonitorAction(
                 scheduledJobIndices.initScheduledJobIndex(ActionListener.wrap(::onCreateMappingsResponse, ::onFailure))
             } else {
                 if (!IndexUtils.scheduledJobIndexUpdated) {
-                    IndexUtils.updateIndexMapping(ScheduledJob.SCHEDULED_JOBS_INDEX, ScheduledJob.SCHEDULED_JOB_TYPE,
+                    IndexUtils.updateIndexMapping(SCHEDULED_JOBS_INDEX, ScheduledJob.SCHEDULED_JOB_TYPE,
                             ScheduledJobIndices.scheduledJobMappings(), clusterService.state(), client.admin().indices(),
                             ActionListener.wrap(::onUpdateMappingsResponse, ::onFailure))
                 } else {
@@ -165,7 +169,7 @@ class RestIndexMonitorAction(
             if (channel.request().method() == PUT) return updateMonitor()
             val query = QueryBuilders.boolQuery().filter(QueryBuilders.termQuery("${Monitor.MONITOR_TYPE}.type", Monitor.MONITOR_TYPE))
             val searchSource = SearchSourceBuilder().query(query).timeout(requestTimeout)
-            val searchRequest = SearchRequest(ScheduledJob.SCHEDULED_JOBS_INDEX)
+            val searchRequest = SearchRequest(SCHEDULED_JOBS_INDEX)
                     .source(searchSource)
             client.search(searchRequest, ActionListener.wrap(::onSearchResponse, ::onFailure))
         }
@@ -204,7 +208,8 @@ class RestIndexMonitorAction(
          * After searching for all existing monitors we validate the system can support another monitor to be created.
          */
         private fun onSearchResponse(response: SearchResponse) {
-            if (response.hits.totalHits.value >= maxMonitors) {
+            val totalHits = response.hits.totalHits?.value
+            if (totalHits != null && totalHits >= maxMonitors) {
                 log.error("This request would create more than the allowed monitors [$maxMonitors].")
                 onFailure(IllegalArgumentException("This request would create more than the allowed monitors [$maxMonitors]."))
             } else {

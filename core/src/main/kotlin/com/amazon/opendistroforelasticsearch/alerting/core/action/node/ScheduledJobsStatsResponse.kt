@@ -35,7 +35,12 @@ class ScheduledJobsStatsResponse : BaseNodesResponse<ScheduledJobStats>, ToXCont
     private var indexExists: Boolean? = null
     private var indexHealth: ClusterIndexHealth? = null
 
-    constructor()
+    constructor(si: StreamInput): super(si) {
+        this.scheduledJobEnabled = si.readBoolean()
+        this.indexExists = si.readBoolean()
+        this.indexHealth = si.readOptionalWriteable { ClusterIndexHealth(si) }
+    }
+
     constructor(
         clusterName: ClusterName,
         nodeResponses: List<ScheduledJobStats>,
@@ -53,11 +58,11 @@ class ScheduledJobsStatsResponse : BaseNodesResponse<ScheduledJobStats>, ToXCont
         out: StreamOutput,
         nodes: MutableList<ScheduledJobStats>
     ) {
-        out.writeStreamableList(nodes)
+        out.writeList(nodes)
     }
 
     override fun readNodesFrom(si: StreamInput): MutableList<ScheduledJobStats> {
-        return si.readList<ScheduledJobStats> { ScheduledJobStats.readScheduledJobStatus(it) }
+        return si.readList { ScheduledJobStats.readScheduledJobStatus(it) }
     }
 
     override fun toXContent(builder: XContentBuilder, params: ToXContent.Params): XContentBuilder {

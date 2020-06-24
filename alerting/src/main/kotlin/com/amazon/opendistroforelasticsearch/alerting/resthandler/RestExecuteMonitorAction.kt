@@ -19,6 +19,7 @@ import com.amazon.opendistroforelasticsearch.alerting.core.model.ScheduledJob
 import com.amazon.opendistroforelasticsearch.alerting.MonitorRunner
 import com.amazon.opendistroforelasticsearch.alerting.model.Monitor
 import com.amazon.opendistroforelasticsearch.alerting.AlertingPlugin
+import com.amazon.opendistroforelasticsearch.alerting.elasticapi.ElasticThreadContextElement
 import org.apache.logging.log4j.LogManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,7 +37,7 @@ import org.elasticsearch.rest.BaseRestHandler
 import org.elasticsearch.rest.BaseRestHandler.RestChannelConsumer
 import org.elasticsearch.rest.BytesRestResponse
 import org.elasticsearch.rest.RestChannel
-import org.elasticsearch.rest.RestController
+import org.elasticsearch.rest.RestHandler.Route
 import org.elasticsearch.rest.RestRequest
 import org.elasticsearch.rest.RestRequest.Method.POST
 import org.elasticsearch.rest.RestStatus
@@ -47,16 +48,17 @@ private val log = LogManager.getLogger(RestExecuteMonitorAction::class.java)
 
 class RestExecuteMonitorAction(
     val settings: Settings,
-    restController: RestController,
     private val runner: MonitorRunner
-) : BaseRestHandler(settings) {
-
-    init {
-        restController.registerHandler(POST, "${AlertingPlugin.MONITOR_BASE_URI}/{monitorID}/_execute", this)
-        restController.registerHandler(POST, "${AlertingPlugin.MONITOR_BASE_URI}/_execute", this)
-    }
+) : BaseRestHandler() {
 
     override fun getName(): String = "execute_monitor_action"
+
+    override fun routes(): List<Route> {
+        return listOf(
+                Route(POST, "${AlertingPlugin.MONITOR_BASE_URI}/{monitorID}/_execute"),
+                Route(POST, "${AlertingPlugin.MONITOR_BASE_URI}/_execute")
+        )
+    }
 
     override fun prepareRequest(request: RestRequest, client: NodeClient): RestChannelConsumer {
         return RestChannelConsumer { channel ->
@@ -64,7 +66,9 @@ class RestExecuteMonitorAction(
             val requestEnd = request.paramAsTime("period_end", TimeValue(Instant.now().toEpochMilli()))
 
             val executeMonitor = fun(monitor: Monitor) {
-                runner.launch {
+                // Launch the coroutine with the clients threadContext. This is needed to preserve authentication information
+                // stored on the threadContext set by the security plugin when using the Alerting plugin with the Security plugin.
+                runner.launch(ElasticThreadContextElement(client.threadPool().threadContext)) {
                     val (periodStart, periodEnd) =
                             monitor.schedule.getPeriodEndingAt(Instant.ofEpochMilli(requestEnd.millis))
                     try {

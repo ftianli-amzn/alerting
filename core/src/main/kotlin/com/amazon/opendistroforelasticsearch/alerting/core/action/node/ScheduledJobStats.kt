@@ -40,11 +40,15 @@ class ScheduledJobStats : BaseNodeResponse, ToXContentFragment {
         }
     }
 
-    lateinit var status: ScheduleStatus
+    var status: ScheduleStatus
     var jobSweeperMetrics: JobSweeperMetrics? = null
     var jobInfos: Array<JobSchedulerMetrics>? = null
 
-    constructor()
+    constructor(si: StreamInput): super(si) {
+        this.status = si.readEnum(ScheduleStatus::class.java)
+        this.jobSweeperMetrics = si.readOptionalWriteable { JobSweeperMetrics(it) }
+        this.jobInfos = si.readOptionalArray({ sti: StreamInput -> JobSchedulerMetrics(sti) }, { size -> arrayOfNulls(size) })
+    }
 
     constructor(
         node: DiscoveryNode,
@@ -59,18 +63,7 @@ class ScheduledJobStats : BaseNodeResponse, ToXContentFragment {
 
     companion object {
         @JvmStatic
-        fun readScheduledJobStatus(si: StreamInput): ScheduledJobStats {
-            val scheduledJobStatus = ScheduledJobStats()
-            scheduledJobStatus.readFrom(si)
-            return scheduledJobStatus
-        }
-    }
-
-    override fun readFrom(si: StreamInput) {
-        super.readFrom(si)
-        this.status = si.readEnum(ScheduleStatus::class.java)
-        this.jobSweeperMetrics = si.readOptionalWriteable { JobSweeperMetrics(si) }
-        this.jobInfos = si.readOptionalArray({ JobSchedulerMetrics(si) }, { arrayOfNulls<JobSchedulerMetrics>(it) })
+        fun readScheduledJobStatus(si: StreamInput) = ScheduledJobStats(si)
     }
 
     override fun writeTo(out: StreamOutput) {
@@ -83,7 +76,7 @@ class ScheduledJobStats : BaseNodeResponse, ToXContentFragment {
     override fun toXContent(builder: XContentBuilder, params: ToXContent.Params): XContentBuilder {
         builder.field("name", node.name)
         builder.field("schedule_status", status)
-        builder.field("roles", node.roles.toTypedArray())
+        builder.field("roles", node.roles.map { it.roleName().toUpperCase() })
         if (jobSweeperMetrics != null) {
             builder.startObject(RestScheduledJobStatsHandler.JOB_SCHEDULING_METRICS)
             jobSweeperMetrics!!.toXContent(builder, params)

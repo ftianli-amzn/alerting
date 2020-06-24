@@ -58,6 +58,7 @@ import org.elasticsearch.painless.spi.WhitelistLoader
 import org.elasticsearch.plugins.ActionPlugin
 import org.elasticsearch.plugins.Plugin
 import org.elasticsearch.plugins.ScriptPlugin
+import org.elasticsearch.repositories.RepositoriesService
 import org.elasticsearch.rest.RestController
 import org.elasticsearch.rest.RestHandler
 import org.elasticsearch.script.ScriptContext
@@ -103,15 +104,15 @@ internal class AlertingPlugin : PainlessExtension, ActionPlugin, ScriptPlugin, P
         indexNameExpressionResolver: IndexNameExpressionResolver?,
         nodesInCluster: Supplier<DiscoveryNodes>
     ): List<RestHandler> {
-        return listOf(RestGetMonitorAction(settings, restController),
-                RestDeleteMonitorAction(settings, restController),
-                RestIndexMonitorAction(settings, restController, scheduledJobIndices, clusterService),
-                RestSearchMonitorAction(settings, restController),
-                RestExecuteMonitorAction(settings, restController, runner),
-                RestAcknowledgeAlertAction(settings, restController),
-                RestScheduledJobStatsHandler(settings, restController, "_alerting"),
-                RestIndexDestinationAction(settings, restController, scheduledJobIndices, clusterService),
-                RestDeleteDestinationAction(settings, restController))
+        return listOf(RestGetMonitorAction(),
+                RestDeleteMonitorAction(),
+                RestIndexMonitorAction(settings, scheduledJobIndices, clusterService),
+                RestSearchMonitorAction(),
+                RestExecuteMonitorAction(settings, runner),
+                RestAcknowledgeAlertAction(),
+                RestScheduledJobStatsHandler("_alerting"),
+                RestIndexDestinationAction(settings, scheduledJobIndices, clusterService),
+                RestDeleteDestinationAction())
     }
 
     override fun getActions(): List<ActionPlugin.ActionHandler<out ActionRequest, out ActionResponse>> {
@@ -131,11 +132,13 @@ internal class AlertingPlugin : PainlessExtension, ActionPlugin, ScriptPlugin, P
         xContentRegistry: NamedXContentRegistry,
         environment: Environment,
         nodeEnvironment: NodeEnvironment,
-        namedWriteableRegistry: NamedWriteableRegistry
+        namedWriteableRegistry: NamedWriteableRegistry,
+        indexNameExpressionResolver: IndexNameExpressionResolver,
+        repositoriesServiceSupplier: Supplier<RepositoriesService>?
     ): Collection<Any> {
         // Need to figure out how to use the Elasticsearch DI classes rather than handwiring things here.
         val settings = environment.settings()
-        alertIndices = AlertIndices(settings, client.admin().indices(), threadPool, clusterService)
+        alertIndices = AlertIndices(settings, client, threadPool, clusterService)
         runner = MonitorRunner(settings, client, threadPool, scriptService, xContentRegistry, alertIndices, clusterService)
         scheduledJobIndices = ScheduledJobIndices(client.admin(), clusterService)
         scheduler = JobScheduler(threadPool, runner)
@@ -160,9 +163,11 @@ internal class AlertingPlugin : PainlessExtension, ActionPlugin, ScriptPlugin, P
                 AlertingSettings.ALERT_BACKOFF_COUNT,
                 AlertingSettings.MOVE_ALERTS_BACKOFF_MILLIS,
                 AlertingSettings.MOVE_ALERTS_BACKOFF_COUNT,
+                AlertingSettings.ALERT_HISTORY_ENABLED,
                 AlertingSettings.ALERT_HISTORY_ROLLOVER_PERIOD,
                 AlertingSettings.ALERT_HISTORY_INDEX_MAX_AGE,
                 AlertingSettings.ALERT_HISTORY_MAX_DOCS,
+                AlertingSettings.ALERT_HISTORY_RETENTION_PERIOD,
                 AlertingSettings.ALERTING_MAX_MONITORS,
                 AlertingSettings.REQUEST_TIMEOUT,
                 AlertingSettings.MAX_ACTION_THROTTLE_VALUE)
