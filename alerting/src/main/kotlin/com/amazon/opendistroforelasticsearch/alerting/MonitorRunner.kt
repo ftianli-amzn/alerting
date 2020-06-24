@@ -18,7 +18,12 @@ package com.amazon.opendistroforelasticsearch.alerting
 import com.amazon.opendistroforelasticsearch.alerting.alerts.AlertError
 import com.amazon.opendistroforelasticsearch.alerting.alerts.AlertIndices
 import com.amazon.opendistroforelasticsearch.alerting.alerts.moveAlerts
+import com.amazon.opendistroforelasticsearch.alerting.client.HttpInputClient
 import com.amazon.opendistroforelasticsearch.alerting.core.JobRunner
+import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.suspendUntil
+import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.toGetRequest
+import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.toMap
+import com.amazon.opendistroforelasticsearch.alerting.core.model.HttpInput
 import com.amazon.opendistroforelasticsearch.alerting.core.model.ScheduledJob
 import com.amazon.opendistroforelasticsearch.alerting.core.model.SearchInput
 import com.amazon.opendistroforelasticsearch.alerting.elasticapi.InjectorContextElement
@@ -65,6 +70,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.apache.http.HttpResponse
 import org.apache.logging.log4j.LogManager
 import org.elasticsearch.ExceptionsHelper
 import org.elasticsearch.action.DocWriteRequest
@@ -111,7 +117,7 @@ class MonitorRunner(
 ) : JobRunner, CoroutineScope, AbstractLifecycleComponent() {
 
     private val logger = LogManager.getLogger(MonitorRunner::class.java)
-
+    private var httpClient: HttpInputClient
     private lateinit var runnerSupervisor: Job
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default + runnerSupervisor
@@ -137,6 +143,7 @@ class MonitorRunner(
         clusterService.clusterSettings.addSettingsUpdateConsumer(ALLOW_LIST) {
             allowList = it
         }
+        httpClient = HttpInputClient()
     }
 
     /** Update destination settings when the reload API is called so that new keystore values are visible */
@@ -149,10 +156,12 @@ class MonitorRunner(
 
     override fun doStart() {
         runnerSupervisor = SupervisorJob()
+        httpClient.client.start()
     }
 
     override fun doStop() {
         runnerSupervisor.cancel()
+        httpClient.client.close()
     }
 
     override fun doClose() { }
@@ -335,6 +344,29 @@ class MonitorRunner(
                         }
                         val searchResponse: SearchResponse = client.suspendUntil { client.search(searchRequest, it) }
                         results += searchResponse.convertToMap()
+                    }
+                    is HttpInput -> {
+                        val response: HttpResponse = httpClient.client.suspendUntil {
+                            httpClient.client.execute(input.toGetRequest(), it)
+                        }
+                        // Make sure response content length is not larger than 100MB
+                        val contentLengthHeader = response.getFirstHeader("Content-Length").value
+
+                        // Use content-length header to check size. If content-length header does not exist, set Alert in Error state.
+                        if (contentLengthHeader != null) {
+                            logger.debug("Content length is $contentLengthHeader")
+                            val contentLength = contentLengthHeader.toInt()
+                            if (contentLength > httpClient.MAX_CONTENT_LENGTH) {
+                                throw Exception("Response content size: $contentLength, is larger than ${httpClient.MAX_CONTENT_LENGTH}.")
+                            }
+                        } else {
+                            logger.debug("Content-length header does not exist, set alert to error state.")
+                            throw IllegalArgumentException("Response does not contain content-length header.")
+                        }
+
+                        results += withContext(Dispatchers.IO) {
+                            response.toMap()
+                        }
                     }
                     else -> {
                         throw IllegalArgumentException("Unsupported input type: ${input.name()}.")

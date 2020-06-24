@@ -16,6 +16,7 @@ package com.amazon.opendistroforelasticsearch.alerting
 
 import com.amazon.opendistroforelasticsearch.alerting.core.model.Input
 import com.amazon.opendistroforelasticsearch.alerting.core.model.IntervalSchedule
+import com.amazon.opendistroforelasticsearch.alerting.core.model.HttpInput
 import com.amazon.opendistroforelasticsearch.alerting.core.model.Schedule
 import com.amazon.opendistroforelasticsearch.alerting.core.model.SearchInput
 import com.amazon.opendistroforelasticsearch.alerting.elasticapi.string
@@ -91,6 +92,27 @@ fun randomMonitorWithoutUser(
     return Monitor(name = name, enabled = enabled, inputs = inputs, schedule = schedule, triggers = triggers,
             enabledTime = enabledTime, lastUpdateTime = lastUpdateTime,
             user = null, uiMetadata = if (withMetadata) mapOf("foo" to "bar") else mapOf())
+}
+
+fun randomHttpInput(
+    scheme: String = "http",
+    host: String = "localhost",
+    port: Int = randomInt(65535),
+    path: String = ESRestTestCase.randomAlphaOfLength(10),
+    params: Map<String, String> = mapOf(),
+    url: String = "",
+    connection_timeout: Int = randomInt(10),
+    socket_timeout: Int = randomInt(10)
+): HttpInput {
+    return HttpInput(
+        scheme = scheme,
+        host = host,
+        port = port,
+        path = path,
+        params = params,
+        url = url,
+        connection_timeout = connection_timeout,
+        socket_timeout = socket_timeout)
 }
 
 fun randomTrigger(
