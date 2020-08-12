@@ -165,7 +165,7 @@ class RestIndexMonitorAction(
          */
         private fun prepareMonitorIndexing() {
             validateActionThrottle(newMonitor, maxActionThrottle, TimeValue.timeValueMinutes(1))
-            validateLocalPort(newMonitor, settings.get("http.port").toInt())
+            //validateLocalPort(newMonitor, settings.get("http.port").toInt())
             if (channel.request().method() == PUT) return updateMonitor()
             val query = QueryBuilders.boolQuery().filter(QueryBuilders.termQuery("${Monitor.MONITOR_TYPE}.type", Monitor.MONITOR_TYPE))
             val searchSource = SearchSourceBuilder().query(query).timeout(requestTimeout)

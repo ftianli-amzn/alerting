@@ -16,13 +16,24 @@
 package com.amazon.opendistroforelasticsearch.alerting.client
 
 import com.amazon.opendistroforelasticsearch.alerting.core.model.HttpInput
+import org.apache.http.HttpHost
+import org.apache.http.auth.AuthScope
+import org.apache.http.auth.UsernamePasswordCredentials
+import org.apache.http.client.CredentialsProvider
 import org.apache.http.client.config.RequestConfig
+import org.apache.http.conn.ssl.TrustSelfSignedStrategy
+import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.nio.client.CloseableHttpAsyncClient
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder
+import org.apache.http.ssl.SSLContextBuilder
+import org.elasticsearch.client.RestClient
+import org.elasticsearch.client.RestClientBuilder
 import org.elasticsearch.common.unit.ByteSizeUnit
 import org.elasticsearch.common.unit.TimeValue
-import java.security.AccessController
-import java.security.PrivilegedAction
+import java.io.IOException
+import java.security.*
+import javax.net.ssl.SSLContext
+
 
 /**
  * This class takes [HttpInput] and performs GET requests to given URIs.
@@ -36,6 +47,7 @@ class HttpInputClient {
     val MAX_CONTENT_LENGTH = ByteSizeUnit.MB.toBytes(100)
 
     val client = createHttpClient()
+    val newRestClient = createWithSelfSignedAndCreds()
 
     /**
      * Create [CloseableHttpAsyncClient] as a [PrivilegedAction] in order to avoid [java.net.NetPermission] error.
@@ -53,5 +65,31 @@ class HttpInputClient {
                     .useSystemProperties()
                     .build()
         } as () -> CloseableHttpAsyncClient))
+    }
+
+    @Throws(IOException::class)
+    private fun createWithSelfSignedAndCreds(): RestClient? {
+        val sslContext: SSLContext
+        sslContext = try {
+            val sslbuilder = SSLContextBuilder()
+            sslbuilder.loadTrustMaterial(null, TrustSelfSignedStrategy())
+            sslbuilder.build()
+        } catch (e: KeyManagementException) {
+            throw IOException(e)
+        } catch (e: NoSuchAlgorithmException) {
+            throw IOException(e)
+        } catch (e: KeyStoreException) {
+            throw IOException(e)
+        }
+        val credentialsProvider: CredentialsProvider = BasicCredentialsProvider()
+        credentialsProvider.setCredentials(AuthScope.ANY,
+                UsernamePasswordCredentials("admin", "admin"))
+        return RestClient.builder(HttpHost("localhost", 9200, "https"))
+                .setHttpClientConfigCallback(object : RestClientBuilder.HttpClientConfigCallback {
+                    override fun customizeHttpClient(httpClientBuilder: HttpAsyncClientBuilder): HttpAsyncClientBuilder? {
+                        httpClientBuilder.setSSLContext(sslContext)
+                        return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
+                    }
+                }).build()
     }
 }
