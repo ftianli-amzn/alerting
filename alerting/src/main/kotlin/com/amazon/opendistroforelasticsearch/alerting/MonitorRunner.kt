@@ -72,6 +72,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.apache.http.HttpResponse
+import org.apache.http.util.EntityUtils
 import org.elasticsearch.ExceptionsHelper
 import org.elasticsearch.action.DocWriteRequest
 import org.elasticsearch.action.bulk.BackoffPolicy
@@ -82,6 +83,8 @@ import org.elasticsearch.action.index.IndexRequest
 import org.elasticsearch.action.search.SearchRequest
 import org.elasticsearch.action.search.SearchResponse
 import org.elasticsearch.client.Client
+import org.elasticsearch.client.Request
+import org.elasticsearch.client.Response
 import org.elasticsearch.cluster.service.ClusterService
 import org.elasticsearch.common.Strings
 import org.elasticsearch.common.bytes.BytesReference
@@ -117,7 +120,7 @@ class MonitorRunner(
 ) : JobRunner, CoroutineScope, AbstractLifecycleComponent() {
 
     private val logger = LogManager.getLogger(MonitorRunner::class.java)
-
+    
     private lateinit var runnerSupervisor: Job
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.Default + runnerSupervisor
@@ -347,12 +350,19 @@ class MonitorRunner(
                         results += searchResponse.convertToMap()
                     }
                     is HttpInput -> {
-                        val response: HttpResponse = httpClient.client.suspendUntil {
-                            httpClient.client.execute(input.toGetRequest(), it)
-                        }
-                        // Make sure response content length is not larger than 100MB
-                        val contentLengthHeader = response.getFirstHeader("Content-Length").value
 
+                        val request = Request("GET", java.lang.String.format("/_cluster/health"))
+                        val response: Response = httpClient.newRestClient!!.performRequest(request)
+                        val responseBody = EntityUtils.toString(response.entity);
+                        logger.info("This is the response from a request made by low-level REST client ")
+                        logger.info(responseBody)
+                        val contentLengthHeader = response.getHeader("Content-Length")
+
+//                        val response: HttpResponse = httpClient.client.suspendUntil {
+//                            httpClient.client.execute(input.toGetRequest(), it)
+//                        }
+                        // Make sure response content length is not larger than 100MB
+                        //val contentLengthHeader = response.getFirstHeader("Content-Length").value
                         // Use content-length header to check size. If content-length header does not exist, set Alert in Error state.
                         if (contentLengthHeader != null) {
                             logger.debug("Content length is $contentLengthHeader")
@@ -368,6 +378,8 @@ class MonitorRunner(
                         results += withContext(Dispatchers.IO) {
                             response.toMap()
                         }
+                        //results += response.toMap()
+                        logger.info(results)
                     }
                     else -> {
                         throw IllegalArgumentException("Unsupported input type: ${input.name()}.")
