@@ -20,9 +20,7 @@ import com.amazon.opendistroforelasticsearch.alerting.alerts.AlertIndices
 import com.amazon.opendistroforelasticsearch.alerting.alerts.moveAlerts
 import com.amazon.opendistroforelasticsearch.alerting.client.HttpInputClient
 import com.amazon.opendistroforelasticsearch.alerting.core.JobRunner
-import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.suspendUntil
-import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.toGetRequest
-import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.toMap
+import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.*
 import com.amazon.opendistroforelasticsearch.alerting.core.model.HttpInput
 import com.amazon.opendistroforelasticsearch.alerting.core.model.ScheduledJob
 import com.amazon.opendistroforelasticsearch.alerting.core.model.SearchInput
@@ -351,18 +349,14 @@ class MonitorRunner(
                     }
                     is HttpInput -> {
 
-                        val request = Request("GET", java.lang.String.format("/_cluster/health"))
-                        val response: Response = httpClient.newRestClient!!.performRequest(request)
-                        val responseBody = EntityUtils.toString(response.entity);
-                        logger.info("This is the response from a request made by low-level REST client ")
-                        logger.info(responseBody)
+                        val response: Response = httpClient.newRestClient.performRequest(input.toRestClientRequest())
                         val contentLengthHeader = response.getHeader("Content-Length")
 
 //                        val response: HttpResponse = httpClient.client.suspendUntil {
 //                            httpClient.client.execute(input.toGetRequest(), it)
 //                        }
-                        // Make sure response content length is not larger than 100MB
-                        //val contentLengthHeader = response.getFirstHeader("Content-Length").value
+//                        // Make sure response content length is not larger than 100MB
+//                        val contentLengthHeader = response.getFirstHeader("Content-Length").value
                         // Use content-length header to check size. If content-length header does not exist, set Alert in Error state.
                         if (contentLengthHeader != null) {
                             logger.debug("Content length is $contentLengthHeader")
@@ -375,11 +369,10 @@ class MonitorRunner(
                             throw IllegalArgumentException("Response does not contain content-length header.")
                         }
 
-                        results += withContext(Dispatchers.IO) {
-                            response.toMap()
-                        }
-                        //results += response.toMap()
-                        logger.info(results)
+//                        results += withContext(Dispatchers.IO) {
+//                            response.toMap()
+//                        }
+                        results += response.toMap()
                     }
                     else -> {
                         throw IllegalArgumentException("Unsupported input type: ${input.name()}.")
