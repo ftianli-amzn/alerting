@@ -15,6 +15,7 @@
 
 package com.amazon.opendistroforelasticsearch.alerting.core.model
 
+import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.toConstructedUrl
 import org.apache.commons.validator.routines.UrlValidator
 import org.apache.http.client.utils.URIBuilder
 import org.elasticsearch.common.CheckedFunction
@@ -57,18 +58,8 @@ data class HttpInput(
         val urlValidator = UrlValidator(arrayOf("http", "https"), UrlValidator.ALLOW_LOCAL_URLS)
 
         // Build url field by field if not provided as whole.
-        val constructedUrl = if (Strings.isEmpty(url)) {
-            val uriBuilder = URIBuilder()
-            uriBuilder.scheme = scheme
-            uriBuilder.host = host
-            uriBuilder.port = port
-            uriBuilder.path = path
-            for (e in params.entries)
-                uriBuilder.addParameter(e.key, e.value)
-            uriBuilder.build()
-        } else {
-            URIBuilder(url).build()
-        }
+        val constructedUrl = this.toConstructedUrl()
+        System.out.println(constructedUrl)
 
         require(urlValidator.isValid(constructedUrl.toString())) {
             "Invalid url: $constructedUrl"

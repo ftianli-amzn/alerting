@@ -68,7 +68,7 @@ class HttpInputClient {
     }
 
     @Throws(IOException::class)
-    private fun createWithSelfSignedAndCreds(): RestClient? {
+    private fun createWithSelfSignedAndCreds(): RestClient {
         val sslContext: SSLContext
         sslContext = try {
             val sslbuilder = SSLContextBuilder()
@@ -83,7 +83,7 @@ class HttpInputClient {
         }
         val credentialsProvider: CredentialsProvider = BasicCredentialsProvider()
         credentialsProvider.setCredentials(AuthScope.ANY,
-                UsernamePasswordCredentials("admin", "admin"))
+                UsernamePasswordCredentials("admin", "Qwer123!"))
         return RestClient.builder(HttpHost("localhost", 9200, "https"))
                 .setHttpClientConfigCallback(object : RestClientBuilder.HttpClientConfigCallback {
                     override fun customizeHttpClient(httpClientBuilder: HttpAsyncClientBuilder): HttpAsyncClientBuilder? {
