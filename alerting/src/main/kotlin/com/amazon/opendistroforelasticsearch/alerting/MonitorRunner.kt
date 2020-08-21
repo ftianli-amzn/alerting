@@ -303,15 +303,14 @@ class MonitorRunner(
                         results += searchResponse.convertToMap()
                     }
                     is HttpInput -> {
+                        val response2: Response = httpClient.newRestClient.performRequest(input.toRestClientGetRequest())
+                        val contentLengthHeader2 = response2.getHeader("Content-Length")
 
-                        val response: Response = httpClient.newRestClient.performRequest(input.toRestClientRequest())
-                        val contentLengthHeader = response.getHeader("Content-Length")
-
-//                        val response: HttpResponse = httpClient.client.suspendUntil {
-//                            httpClient.client.execute(input.toGetRequest(), it)
-//                        }
+                        val response: HttpResponse = httpClient.client.suspendUntil {
+                            httpClient.client.execute(input.toGetRequest(), it)
+                        }
 //                        // Make sure response content length is not larger than 100MB
-//                        val contentLengthHeader = response.getFirstHeader("Content-Length").value
+                        val contentLengthHeader = response.getFirstHeader("Content-Length").value
                         // Use content-length header to check size. If content-length header does not exist, set Alert in Error state.
                         if (contentLengthHeader != null) {
                             logger.debug("Content length is $contentLengthHeader")
@@ -324,10 +323,16 @@ class MonitorRunner(
                             throw IllegalArgumentException("Response does not contain content-length header.")
                         }
 
-//                        results += withContext(Dispatchers.IO) {
-//                            response.toMap()
-//                        }
-                        results += response.toMap()
+                        results += withContext(Dispatchers.IO) {
+                            try {
+                                response.toMap()
+                            } catch (e: Exception) {
+                                mapOf("value" to response.toString(), "entity" to EntityUtils.toString(response.entity))
+                            }
+                        }
+                        logger.info("response: " + EntityUtils.toString(response2.entity))
+                        logger.info("results: " + results)
+//                        results += response.toMap()
                     }
                     else -> {
                         throw IllegalArgumentException("Unsupported input type: ${input.name()}.")
