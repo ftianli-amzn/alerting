@@ -47,7 +47,7 @@ class HttpInputClient {
     val MAX_CONTENT_LENGTH = ByteSizeUnit.MB.toBytes(100)
 
     val client = createHttpClient()
-    val newRestClient = createWithSelfSignedAndCreds()
+    val newRestClient = createESRestClient()
 
     /**
      * Create [CloseableHttpAsyncClient] as a [PrivilegedAction] in order to avoid [java.net.NetPermission] error.
@@ -59,32 +59,47 @@ class HttpInputClient {
                 .setSocketTimeout(SOCKET_TIMEOUT_MILLISECONDS)
                 .build()
 
-        return AccessController.doPrivileged(PrivilegedAction<CloseableHttpAsyncClient>({
-            HttpAsyncClientBuilder.create()
-                    .setDefaultRequestConfig(config)
-                    .useSystemProperties()
-                    .build()
-        } as () -> CloseableHttpAsyncClient))
-    }
-
-    @Throws(IOException::class)
-    private fun createWithSelfSignedAndCreds(): RestClient {
         val sslContext: SSLContext
         sslContext = try {
             val sslbuilder = SSLContextBuilder()
             sslbuilder.loadTrustMaterial(null, TrustSelfSignedStrategy())
             sslbuilder.build()
-        } catch (e: KeyManagementException) {
-            throw IOException(e)
-        } catch (e: NoSuchAlgorithmException) {
-            throw IOException(e)
-        } catch (e: KeyStoreException) {
-            throw IOException(e)
+        } catch (e: Exception) {
+            when (e) {
+                is KeyManagementException, is NoSuchAlgorithmException, is KeyStoreException -> throw IOException(e)
+                else -> throw e
+            }
         }
         val credentialsProvider: CredentialsProvider = BasicCredentialsProvider()
         credentialsProvider.setCredentials(AuthScope.ANY,
                 UsernamePasswordCredentials("admin", "Qwer123!"))
-        return RestClient.builder(HttpHost("localhost", 9200, "https"))
+
+        return AccessController.doPrivileged(PrivilegedAction<CloseableHttpAsyncClient>({
+            HttpAsyncClientBuilder.create()
+                    .setDefaultRequestConfig(config)
+                    .setDefaultCredentialsProvider(credentialsProvider)
+                    //.setSSLContext(sslContext)
+                    .useSystemProperties()
+                    .build()
+        } as () -> CloseableHttpAsyncClient))
+    }
+
+    private fun createESRestClient() : RestClient {
+        val sslContext: SSLContext
+        sslContext = try {
+            val sslbuilder = SSLContextBuilder()
+            sslbuilder.loadTrustMaterial(null, TrustSelfSignedStrategy())
+            sslbuilder.build()
+        } catch (e: Exception) {
+            when (e) {
+                is KeyManagementException, is NoSuchAlgorithmException, is KeyStoreException -> throw IOException(e)
+                else -> throw e
+            }
+        }
+        val credentialsProvider: CredentialsProvider = BasicCredentialsProvider()
+        credentialsProvider.setCredentials(AuthScope.ANY,
+                UsernamePasswordCredentials("admin", "Qwer123!"))
+        return RestClient.builder(HttpHost("search-test-httpinput-y2xwoxjfanf6bxvgkicu4p5gr4.us-west-2.es.amazonaws.com", 443, "https"))
                 .setHttpClientConfigCallback(object : RestClientBuilder.HttpClientConfigCallback {
                     override fun customizeHttpClient(httpClientBuilder: HttpAsyncClientBuilder): HttpAsyncClientBuilder? {
                         httpClientBuilder.setSSLContext(sslContext)
