@@ -274,7 +274,7 @@ class TransportIndexMonitorAction @Inject constructor(
 
             try {
                 validateActionThrottle(request.monitor, maxActionThrottle, TimeValue.timeValueMinutes(1))
-                validateLocalPort(request.monitor, settings.get("http.port").toInt())
+                //validateLocalPort(request.monitor, settings.get("http.port").toInt())
             } catch (e: RuntimeException) {
                 actionListener.onFailure(AlertingException.wrap(e))
                 return
