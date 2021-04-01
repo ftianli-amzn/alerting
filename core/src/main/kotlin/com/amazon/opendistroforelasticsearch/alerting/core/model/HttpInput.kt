@@ -20,6 +20,8 @@ import org.apache.http.client.utils.URIBuilder
 import org.elasticsearch.common.CheckedFunction
 import org.elasticsearch.common.ParseField
 import org.elasticsearch.common.Strings
+import org.elasticsearch.common.io.stream.StreamInput
+import org.elasticsearch.common.io.stream.StreamOutput
 import org.elasticsearch.common.xcontent.NamedXContentRegistry
 import org.elasticsearch.common.xcontent.ToXContent
 import org.elasticsearch.common.xcontent.XContentBuilder
@@ -75,6 +77,18 @@ data class HttpInput(
         }
     }
 
+    @Throws(IOException::class)
+    constructor(sin: StreamInput): this(
+            sin.readString(), // schema
+            sin.readString(), // host
+            sin.readInt(), // port
+            sin.readString(), // path
+            sin.readMap({ it.readString() }, { it.readString() }), // params
+            sin.readString(), // url
+            sin.readInt(), // connection_timeout
+            sin.readInt() // socket_timeout
+    )
+
     override fun toXContent(builder: XContentBuilder, params: ToXContent.Params): XContentBuilder {
         return builder.startObject()
                 .startObject(HTTP_FIELD)
@@ -92,6 +106,18 @@ data class HttpInput(
 
     override fun name(): String {
         return HTTP_FIELD
+    }
+
+    @Throws(IOException::class)
+    override fun writeTo(out: StreamOutput) {
+        out.writeString(scheme)
+        out.writeString(host)
+        out.writeInt(port)
+        out.writeString(path)
+        out.writeMap(params)
+        out.writeString(url)
+        out.writeInt(connection_timeout)
+        out.writeInt(socket_timeout)
     }
 
     companion object {
@@ -121,7 +147,7 @@ data class HttpInput(
             var connectionTimeout = 5
             var socketTimeout = 10
 
-            XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, xcp.currentToken(), xcp::getTokenLocation)
+            XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, xcp.currentToken(), xcp)
 
             while (xcp.nextToken() != XContentParser.Token.END_OBJECT) {
                 val fieldName = xcp.currentName()
@@ -138,6 +164,12 @@ data class HttpInput(
                 }
             }
             return HttpInput(scheme, host, port, path, params, url, connectionTimeout, socketTimeout)
+        }
+
+        @JvmStatic
+        @Throws(IOException::class)
+        fun readFrom(sin: StreamInput): HttpInput {
+            return HttpInput(sin)
         }
     }
 

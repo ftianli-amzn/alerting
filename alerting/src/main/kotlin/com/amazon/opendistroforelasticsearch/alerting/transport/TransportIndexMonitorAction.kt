@@ -308,7 +308,7 @@ class TransportIndexMonitorAction @Inject constructor(
                 }
             }
         }
-        
+
         /**
          * This function checks whether the [Monitor] has an [HttpInput] with localhost. If so, make sure the port is same as specified in settings.
          */
