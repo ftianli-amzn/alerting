@@ -19,6 +19,8 @@ import com.amazon.opendistroforelasticsearch.alerting.action.IndexMonitorAction
 import com.amazon.opendistroforelasticsearch.alerting.action.IndexMonitorRequest
 import com.amazon.opendistroforelasticsearch.alerting.action.IndexMonitorResponse
 import com.amazon.opendistroforelasticsearch.alerting.core.ScheduledJobIndices
+import com.amazon.opendistroforelasticsearch.alerting.core.httpapi.toConstructedUrl
+import com.amazon.opendistroforelasticsearch.alerting.core.model.HttpInput
 import com.amazon.opendistroforelasticsearch.alerting.core.model.ScheduledJob
 import com.amazon.opendistroforelasticsearch.alerting.core.model.ScheduledJob.Companion.SCHEDULED_JOBS_INDEX
 import com.amazon.opendistroforelasticsearch.alerting.core.model.ScheduledJob.Companion.SCHEDULED_JOB_TYPE
@@ -272,6 +274,7 @@ class TransportIndexMonitorAction @Inject constructor(
 
             try {
                 validateActionThrottle(request.monitor, maxActionThrottle, TimeValue.timeValueMinutes(1))
+                validateLocalPort(request.monitor, settings.get("http.port").toInt())
             } catch (e: RuntimeException) {
                 actionListener.onFailure(AlertingException.wrap(e))
                 return
@@ -301,6 +304,23 @@ class TransportIndexMonitorAction @Inject constructor(
                                 .compareTo(maxValue) <= 0, { "Can only set throttle period less than or equal to $maxValue" })
                         require(TimeValue(Duration.of(action.throttle.value.toLong(), action.throttle.unit).toMillis())
                                 .compareTo(minValue) >= 0, { "Can only set throttle period greater than or equal to $minValue" })
+                    }
+                }
+            }
+        }
+        
+        /**
+         * This function checks whether the [Monitor] has an [HttpInput] with localhost. If so, make sure the port is same as specified in settings.
+         */
+        private fun validateLocalPort(monitor: Monitor, settingsPort: Int) {
+            for (input in monitor.inputs) {
+                if (input is HttpInput) {
+                    val constructedUrl = input.toConstructedUrl()
+                    // Make sure that when host is "localhost", only port number specified in settings is allowed.
+                    if (constructedUrl.host == "localhost") {
+                        require(constructedUrl.port == settingsPort) {
+                            "Host: ${constructedUrl.host} is restricted to port $settingsPort."
+                        }
                     }
                 }
             }
